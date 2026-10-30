@@ -141,6 +141,12 @@ fun ItemProducto(
                     fontWeight = FontWeight.Medium,
                     color = if (producto.currentStock <= 10) Color.Red else Color(0xFF049749)
                 )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Precio: ${java.text.NumberFormat.getCurrencyInstance(java.util.Locale.forLanguageTag("es-MX")).format(producto.price)}",
+                    fontSize = 14.sp,
+                    color = Color.DarkGray
+                )
             }
         }
     }

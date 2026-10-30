@@ -7,10 +7,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.rememberNavController
 import com.example.rampasmezaapp.navigation.AuthNavigation
 import com.example.rampasmezaapp.ui.auth.AuthViewModel
@@ -28,8 +26,8 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val navController = rememberNavController()
-                    val authViewModel = AuthViewModel()
-                    val inventarioGlobalViewModel = remember { ViewModelInventarioGlobal() }
+                    val authViewModel: AuthViewModel = viewModel()
+                    val inventarioGlobalViewModel: ViewModelInventarioGlobal = viewModel()
                     
                     AuthNavigation(
                         navController = navController,

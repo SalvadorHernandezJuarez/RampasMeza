@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.rampasmezaapp.data.Producto
 import com.example.rampasmezaapp.data.DatosProductos
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -68,13 +70,35 @@ class ViewModelInventario(
             _estadoInventario.value = estado.copy(cargando = true, mensajeError = null)
             
             try {
+                val usuario = FirebaseAuth.getInstance().currentUser
+                    ?: throw IllegalStateException("Debes iniciar sesión")
                 val docRef = firestore.collection("inventory").document(productoSeleccionado.id)
-                val doc = docRef.get().await()
-                
-                val stockActual = doc.getLong("currentStock")?.toInt() ?: 0
-                val nuevoStock = stockActual + cantidadStock
-                
-                docRef.update("currentStock", nuevoStock).await()
+                val movimientoRef = firestore.collection("inventory_adjustments").document()
+                val nuevoStock = firestore.runTransaction { transaction ->
+                    val doc = transaction.get(docRef)
+                    val stockActual = doc.getLong("currentStock")?.toInt() ?: 0
+                    val stockFinal = stockActual + cantidadStock
+                    transaction.update(
+                        docRef,
+                        mapOf("currentStock" to stockFinal, "lastAdjustmentId" to movimientoRef.id)
+                    )
+                    transaction.set(
+                        movimientoRef,
+                        mapOf(
+                            "productoId" to productoSeleccionado.id,
+                            "producto" to productoSeleccionado.name,
+                            "cantidad" to cantidadStock,
+                            "tipo" to "Entrada",
+                            "motivo" to "Compra",
+                            "stockAnterior" to stockActual,
+                            "stockNuevo" to stockFinal,
+                            "createdBy" to usuario.uid,
+                            "usuario" to (usuario.email ?: "Usuario"),
+                            "createdAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                    stockFinal
+                }.await()
                 
                 viewModelGlobal.actualizarStockProducto(productoSeleccionado.id, nuevoStock)
 

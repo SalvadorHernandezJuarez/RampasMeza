@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,21 +17,28 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.rampasmezaapp.R
 import com.example.rampasmezaapp.ui.inventario.DialogoSeleccionProducto
 import com.example.rampasmezaapp.ui.inventario.ViewModelInventarioGlobal
 import com.example.rampasmezaapp.data.Producto
 import androidx.compose.material.icons.filled.Close
+import java.text.NumberFormat
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegistrarVentas(
     inventarioGlobalViewModel: ViewModelInventarioGlobal,
+    nombreVendedor: String,
     onBackToMainClick: () -> Unit
 ) {
     val estadoGlobal by inventarioGlobalViewModel.estadoGlobal.collectAsState()
-    val viewModelVentas = remember { ViewModelVentas() }
+    val viewModelVentas: ViewModelVentas = viewModel()
     val estadoVentas by viewModelVentas.estado.collectAsState()
+    val context = LocalContext.current
+    val moneda = remember { NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-MX")) }
 
     var mostrarSelector by remember { mutableStateOf(false) }
     var productoSeleccionado by remember { mutableStateOf<Producto?>(null) }
@@ -68,7 +77,8 @@ fun RegistrarVentas(
                 .fillMaxSize()
                 .background(Color.White)
                 .padding(padding)
-                .padding(24.dp),
+                .padding(24.dp)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             androidx.compose.foundation.Image(
@@ -92,6 +102,14 @@ fun RegistrarVentas(
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text(text = productoSeleccionado?.name ?: "Seleccionar producto", color = Color.White)
+            }
+
+            productoSeleccionado?.let {
+                Text(
+                    text = "Precio unitario: ${moneda.format(it.price)}",
+                    modifier = Modifier.padding(top = 8.dp),
+                    color = Color.DarkGray
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -186,9 +204,11 @@ fun RegistrarVentas(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(p.name)
+                                    Text(p.name, modifier = Modifier.weight(1f))
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text("x$q")
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(moneda.format(p.price * q))
                                         Spacer(Modifier.width(12.dp))
                                         IconButton(onClick = {
                                             itemsVenta = itemsVenta.filterNot { it.first.id == p.id }
@@ -208,6 +228,12 @@ fun RegistrarVentas(
                                 }
                             }
                         }
+                        Text(
+                            text = "Total: ${moneda.format(itemsVenta.sumOf { (producto, cantidad) -> producto.price * cantidad })}",
+                            modifier = Modifier.align(Alignment.End).padding(top = 8.dp),
+                            fontSize = 18.sp,
+                            color = Color.Black
+                        )
                     }
                 }
             }
@@ -236,7 +262,7 @@ fun RegistrarVentas(
                         mensajeError = "Agrega al menos un producto"
                         return@Button
                     }
-                    viewModelVentas.registrarVenta { cambios ->
+                    viewModelVentas.registrarVenta(nombreVendedor) { cambios ->
                         // Actualizar stock global en memoria para reflejar al instante
                         cambios.forEach { (id, nuevo) ->
                             inventarioGlobalViewModel.actualizarStockProducto(id, nuevo)
@@ -253,6 +279,24 @@ fun RegistrarVentas(
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.Black)
                 } else {
                     Text("Registrar venta", color = Color.Black)
+                }
+            }
+
+            estadoVentas.recibo?.let { recibo ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        try {
+                            compartirComprobante(context, recibo)
+                        } catch (e: Exception) {
+                            mensajeError = "No se pudo compartir el comprobante: ${e.message}"
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF049749)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Compartir nota de venta PDF", color = Color.White)
                 }
             }
 
@@ -279,5 +323,3 @@ fun RegistrarVentas(
         )
     }
 }
-
-

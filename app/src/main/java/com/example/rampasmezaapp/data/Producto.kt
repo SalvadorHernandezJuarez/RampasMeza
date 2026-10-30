@@ -5,7 +5,8 @@ data class Producto(
     val name: String,
     val description: String,
     val currentStock: Int = 0,
-    val imageResource: String = ""
+    val imageResource: String = "",
+    val price: Double = 0.0
 )
 
 object DatosProductos {

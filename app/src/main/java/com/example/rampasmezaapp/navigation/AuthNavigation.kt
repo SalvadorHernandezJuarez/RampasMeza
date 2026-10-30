@@ -11,6 +11,10 @@ import com.example.rampasmezaapp.ui.auth.LoginScreen
 import com.example.rampasmezaapp.ui.auth.RegisterScreen
 import com.example.rampasmezaapp.ui.inventario.PanelDeControl
 import com.example.rampasmezaapp.ui.inventario.AnadirStock
+import com.example.rampasmezaapp.ui.inventario.AjustesInventario
+import com.example.rampasmezaapp.ui.auth.Administracion
+import com.example.rampasmezaapp.ui.ventas.Cotizaciones
+import com.example.rampasmezaapp.data.RolUsuario
 
 @Composable
 fun AuthNavigation(
@@ -20,8 +24,8 @@ fun AuthNavigation(
 ) {
     val authState = authViewModel.authState.collectAsState().value
 
-    LaunchedEffect(authState.user) {
-        if (authState.user != null) {
+    LaunchedEffect(authState.user, authState.profileLoading) {
+        if (authState.user != null && !authState.profileLoading) {
             navController.navigate("inventory") {
                 popUpTo("login") { inclusive = true }
             }
@@ -40,7 +44,7 @@ fun AuthNavigation(
                 onRegisterClick = {
                     navController.navigate("register")
                 },
-                isLoading = authState.isLoading,
+                isLoading = authState.isLoading || authState.profileLoading,
                 errorMessage = authState.errorMessage
             )
         }
@@ -60,6 +64,7 @@ fun AuthNavigation(
 
                 composable("inventory") {
                     PanelDeControl(
+                        rol = authState.rol,
                         onLogoutClick = {
                             authViewModel.logout()
                             navController.navigate("login") {
@@ -77,7 +82,10 @@ fun AuthNavigation(
                         },
                         onReporteInventarioClick = {
                             navController.navigate("reporte_inventario")
-                        }
+                        },
+                        onCotizacionesClick = { navController.navigate("cotizaciones") },
+                        onAjustesInventarioClick = { navController.navigate("ajustes_inventario") },
+                        onAdministracionClick = { navController.navigate("administracion") }
                     )
                 }
 
@@ -94,6 +102,7 @@ fun AuthNavigation(
                 composable("registrar_ventas") {
                     com.example.rampasmezaapp.ui.ventas.RegistrarVentas(
                         inventarioGlobalViewModel = inventarioGlobalViewModel,
+                        nombreVendedor = authState.nombre,
                         onBackToMainClick = { navController.popBackStack() }
                     )
                 }
@@ -111,6 +120,37 @@ fun AuthNavigation(
                         inventarioGlobalViewModel = inventarioGlobalViewModel,
                         onBackToMainClick = { navController.popBackStack() }
                     )
+                }
+
+                composable("cotizaciones") {
+                    if (authState.rol != RolUsuario.ALMACENISTA) {
+                        Cotizaciones(
+                            inventarioGlobalViewModel = inventarioGlobalViewModel,
+                            nombreVendedor = authState.nombre,
+                            esAdministrador = authState.rol == RolUsuario.ADMINISTRADOR,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+                }
+
+                composable("ajustes_inventario") {
+                    if (authState.rol != RolUsuario.VENDEDOR) {
+                        AjustesInventario(
+                            inventarioGlobalViewModel = inventarioGlobalViewModel,
+                            nombreUsuario = authState.nombre,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+                }
+
+                composable("administracion") {
+                    if (authState.rol == RolUsuario.ADMINISTRADOR) {
+                        Administracion(
+                            inventarioGlobalViewModel = inventarioGlobalViewModel,
+                            nombreAdministrador = authState.nombre,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
                 }
     }
 }

@@ -3,6 +3,8 @@ package com.example.rampasmezaapp.ui.ventas
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.rampasmezaapp.data.Producto
+import com.example.rampasmezaapp.ui.inventario.EmailJSHelper
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,24 +14,39 @@ import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.example.rampasmezaapp.ui.inventario.EmailJSHelper
+import kotlin.math.round
 
 data class ItemVenta(val producto: Producto, val cantidad: Int)
+data class ItemRecibo(
+    val productoId: String,
+    val nombre: String,
+    val cantidad: Int,
+    val precioUnitario: Double,
+    val subtotal: Double
+)
+data class ReciboVenta(
+    val id: String,
+    val fecha: String,
+    val vendedor: String,
+    val items: List<ItemRecibo>,
+    val total: Double
+)
 
 data class EstadoVentas(
     val items: List<ItemVenta> = emptyList(),
     val cargando: Boolean = false,
     val mensajeError: String? = null,
-    val mensajeExito: String? = null
+    val mensajeExito: String? = null,
+    val recibo: ReciboVenta? = null
 )
 
 class ViewModelVentas : ViewModel() {
     private val firestore = FirebaseFirestore.getInstance()
-
     private val _estado = MutableStateFlow(EstadoVentas())
     val estado: StateFlow<EstadoVentas> = _estado.asStateFlow()
 
     fun agregarItem(producto: Producto, cantidad: Int) {
+        if (cantidad <= 0) return
         _estado.value = _estado.value.copy(items = _estado.value.items + ItemVenta(producto, cantidad))
     }
 
@@ -37,73 +54,91 @@ class ViewModelVentas : ViewModel() {
         _estado.value = EstadoVentas()
     }
 
-    fun registrarVenta(onStocksActualizados: (Map<String, Int>) -> Unit) {
+    fun registrarVenta(
+        nombreVendedor: String,
+        onStocksActualizados: (Map<String, Int>) -> Unit
+    ) {
         val items = _estado.value.items
-        if (items.isEmpty()) return
+        if (items.isEmpty() || _estado.value.cargando) return
 
         _estado.value = _estado.value.copy(cargando = true, mensajeError = null, mensajeExito = null)
-
         viewModelScope.launch {
             try {
+                val usuario = FirebaseAuth.getInstance().currentUser
+                    ?: throw IllegalStateException("Debes iniciar sesión para registrar una venta")
+                val fecha = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.US).format(Date())
+                val ventaRef = firestore.collection("ventas").document()
+                val cantidades = items.groupBy { it.producto.id }.mapValues { (_, repetidos) ->
+                    val total = repetidos.sumOf { it.cantidad.toLong() }
+                    if (total > Int.MAX_VALUE) throw IllegalArgumentException("La cantidad total supera el límite permitido")
+                    total.toInt()
+                }
+                val productos = items.associateBy { it.producto.id }
+
                 val cambios = firestore.runTransaction { tx ->
-                    // 1) LEER primero todos los documentos involucrados
-                    val lecturas = items.map { item ->
-                        val ref = firestore.collection("inventory").document(item.producto.id)
-                        val snap = tx.get(ref)
-                        Triple(item, ref, snap)
+                    val lecturas = cantidades.keys.associateWith { id ->
+                        val ref = firestore.collection("inventory").document(id)
+                        Triple(ref, tx.get(ref), cantidades.getValue(id))
                     }
-
-                    // 2) Validar y calcular nuevos stocks sin escribir aún
-                    val cambiosStock = mutableMapOf<String, Int>()
-                    lecturas.forEach { (item, ref, snap) ->
-                        val actual = snap.getLong("currentStock")?.toInt() ?: 0
-                        val nuevo = actual - item.cantidad
-                        if (nuevo < 0) throw IllegalStateException("Stock insuficiente para ${item.producto.name}")
-                        cambiosStock[item.producto.id] = nuevo
+                    val lineas = lecturas.map { (id, lectura) ->
+                        val (ref, snap, cantidad) = lectura
+                        val producto = productos.getValue(id).producto
+                        val stock = snap.getLong("currentStock")?.toInt() ?: 0
+                        val precio = snap.getDouble("currentPrice") ?: producto.price
+                        if (!snap.exists()) throw IllegalStateException("No existe el producto ${producto.name}")
+                        if (precio <= 0.0) throw IllegalStateException("Configura el precio de ${producto.name} antes de vender")
+                        if (stock < cantidad) throw IllegalStateException("Stock insuficiente para ${producto.name}")
+                        Triple(ref, stock - cantidad, ItemRecibo(id, producto.name, cantidad, precio, redondear(precio * cantidad)))
                     }
-
-                    // 3) ESCRIBIR actualizaciones de inventario
-                    lecturas.forEach { (item, ref, _) ->
-                        val nuevo = cambiosStock[item.producto.id] ?: return@forEach
-                        tx.update(ref, "currentStock", nuevo)
-                    }
-
-                    // 4) ESCRIBIR documento de venta
-                    val fecha = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-                    val itemsDoc = items.map {
-                        mapOf(
-                            "productoId" to it.producto.id,
-                            "nombre" to it.producto.name,
-                            "cantidad" to it.cantidad
+                    lineas.forEach { (ref, stockNuevo, _) ->
+                        tx.update(
+                            ref,
+                            mapOf("currentStock" to stockNuevo, "lastSaleId" to ventaRef.id)
                         )
                     }
-                    val ventaDoc = mapOf(
-                        "fecha" to fecha,
-                        "items" to itemsDoc,
-                        "total" to null
+                    val reciboItems = lineas.map { it.third }
+                    val total = redondear(reciboItems.sumOf { it.subtotal })
+                    tx.set(
+                        ventaRef,
+                        mapOf(
+                            "fecha" to fecha,
+                            "items" to reciboItems.map {
+                                mapOf(
+                                    "productoId" to it.productoId,
+                                    "nombre" to it.nombre,
+                                    "cantidad" to it.cantidad,
+                                    "precioUnitario" to it.precioUnitario,
+                                    "subtotal" to it.subtotal
+                                )
+                            },
+                            "total" to total,
+                            "createdBy" to usuario.uid,
+                            "vendedor" to nombreVendedor,
+                            "cantidades" to cantidades
+                        )
                     )
-                    tx.set(firestore.collection("ventas").document(), ventaDoc)
-
-                    cambiosStock.toMap()
+                    Pair(lineas.associate { it.first.id to it.second }, reciboItems to total)
                 }.await()
 
-                onStocksActualizados(cambios)
-
-
-                cambios.forEach { (id, nuevoStock) ->
-                    val producto = items.find { it.producto.id == id }?.producto
-                    if (producto != null && nuevoStock <= 10) {
-                        EmailJSHelper.enviarAlertaStockBajo(
-                            nombreProducto = producto.name,
-                            stock = nuevoStock.toString()
-                        )
+                val stocks = cambios.first
+                onStocksActualizados(stocks)
+                stocks.forEach { (id, stock) ->
+                    if (stock <= 10) {
+                        productos[id]?.producto?.let {
+                            EmailJSHelper.enviarAlertaStockBajo(it.name, stock.toString())
+                        }
                     }
                 }
-                _estado.value = _estado.value.copy(cargando = false, mensajeExito = "Venta registrada", items = emptyList())
+                val recibo = ReciboVenta(ventaRef.id, fecha, nombreVendedor, cambios.second.first, cambios.second.second)
+                _estado.value = EstadoVentas(
+                    mensajeExito = "Venta registrada",
+                    recibo = recibo
+                )
             } catch (e: Exception) {
-                _estado.value = _estado.value.copy(cargando = false, mensajeError = e.message)
+                _estado.value = _estado.value.copy(cargando = false, mensajeError = e.message ?: "No se pudo registrar la venta")
             }
         }
-    }}
+    }
 
-
+    private fun redondear(valor: Double): Double = round(valor * 100.0) / 100.0
+}

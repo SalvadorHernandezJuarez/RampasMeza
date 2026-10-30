@@ -49,11 +49,12 @@ class ViewModelInventarioGlobal : ViewModel() {
                     val doc = docRef.get().await()
                     
                     if (!doc.exists()) {
-                        docRef.set(mapOf("currentStock" to 0)).await()
+                        docRef.set(mapOf("currentStock" to 0, "currentPrice" to producto.price)).await()
                         productosActualizados.add(producto.copy(currentStock = 0))
                     } else {
                         val stockActual = doc.getLong("currentStock")?.toInt() ?: 0
-                        productosActualizados.add(producto.copy(currentStock = stockActual))
+                        val precio = doc.getDouble("currentPrice") ?: producto.price
+                        productosActualizados.add(producto.copy(currentStock = stockActual, price = precio))
                     }
                 }
                 
@@ -74,13 +75,15 @@ class ViewModelInventarioGlobal : ViewModel() {
 
     fun actualizarStockProducto(productoId: String, nuevoStock: Int) {
         val productosActualizados = _estadoGlobal.value.productos.map { producto ->
-            if (producto.id == productoId) {
-                producto.copy(currentStock = nuevoStock)
-            } else {
-                producto
-            }
+            if (producto.id == productoId) producto.copy(currentStock = nuevoStock) else producto
         }
-        
+        _estadoGlobal.value = _estadoGlobal.value.copy(productos = productosActualizados)
+    }
+
+    fun actualizarPrecioProducto(productoId: String, nuevoPrecio: Double) {
+        val productosActualizados = _estadoGlobal.value.productos.map { producto ->
+            if (producto.id == productoId) producto.copy(price = nuevoPrecio) else producto
+        }
         _estadoGlobal.value = _estadoGlobal.value.copy(productos = productosActualizados)
     }
 }

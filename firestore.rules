@@ -6,41 +6,223 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function roleIs(role) {
+      return signedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+
+    function isAdmin() {
+      return roleIs('Administrador');
+    }
+
+    function isSeller() {
+      return roleIs('Vendedor');
+    }
+
+    function isWarehouse() {
+      return roleIs('Almacenista');
+    }
+
     function validStock() {
-      return request.resource.data.keys().hasAll(['currentStock'])
-        && request.resource.data.keys().hasOnly(['currentStock'])
-        && request.resource.data.currentStock is int
+      return request.resource.data.currentStock is int
         && request.resource.data.currentStock >= 0;
     }
 
+    function saleMatchesStockChange(productId) {
+      let sale = getAfter(
+        /databases/$(database)/documents/ventas/$(request.resource.data.lastSaleId)
+      ).data;
+      return request.resource.data.lastSaleId is string
+        && sale.createdBy == request.auth.uid
+        && sale.cantidades[productId] is int
+        && sale.cantidades[productId]
+          == resource.data.currentStock - request.resource.data.currentStock;
+    }
+
+    function adjustmentMatchesStockChange(productId) {
+      let movement = getAfter(
+        /databases/$(database)/documents/inventory_adjustments/$(request.resource.data.lastAdjustmentId)
+      ).data;
+      return request.resource.data.lastAdjustmentId is string
+        && movement.createdBy == request.auth.uid
+        && movement.productoId == productId
+        && movement.stockAnterior == resource.data.currentStock
+        && movement.stockNuevo == request.resource.data.currentStock;
+    }
+
     match /users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
       allow create: if signedIn()
         && request.auth.uid == userId
-        && request.resource.data.keys().hasAll(['name', 'email', 'createdAt'])
-        && request.resource.data.keys().hasOnly(['name', 'email', 'createdAt'])
+        && request.resource.data.keys().hasAll(['name', 'email', 'createdAt', 'role'])
+        && request.resource.data.keys().hasOnly(['name', 'email', 'createdAt', 'role'])
         && request.resource.data.name is string
         && request.resource.data.email is string
-        && request.resource.data.createdAt is int;
+        && request.resource.data.createdAt is int
+        && request.resource.data.role == 'Vendedor';
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role'])
+        && request.resource.data.role in ['Administrador', 'Vendedor', 'Almacenista'];
+      allow delete: if false;
     }
 
     match /inventory/{productId} {
       allow read: if signedIn();
-      allow create: if signedIn() && validStock();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll(['currentStock', 'currentPrice'])
+        && request.resource.data.keys().hasOnly(['currentStock', 'currentPrice'])
+        && validStock()
+        && request.resource.data.currentPrice is number
+        && request.resource.data.currentPrice >= 0
+        && (request.resource.data.currentStock == 0 || isAdmin() || isWarehouse());
       allow update: if signedIn()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentStock'])
-        && validStock();
+        && (
+          (
+            (isAdmin() || isWarehouse())
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['currentStock', 'lastAdjustmentId'])
+            && validStock()
+            && adjustmentMatchesStockChange(productId)
+          )
+          || (
+            (isAdmin() || isSeller())
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['currentStock', 'lastSaleId'])
+            && validStock()
+            && request.resource.data.currentStock < resource.data.currentStock
+            && saleMatchesStockChange(productId)
+          )
+          || (
+            isAdmin()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentPrice'])
+            && request.resource.data.currentPrice is number
+            && request.resource.data.currentPrice >= 0
+          )
+        );
+      allow delete: if false;
     }
 
     match /ventas/{ventaId} {
       allow read: if signedIn();
-      allow create: if signedIn()
-        && request.resource.data.keys().hasAll(['fecha', 'items', 'total'])
-        && request.resource.data.keys().hasOnly(['fecha', 'items', 'total'])
+      allow create: if (isAdmin() || isSeller())
+        && request.resource.data.keys().hasAll([
+          'fecha', 'items', 'total', 'createdBy', 'vendedor', 'cantidades'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'fecha', 'items', 'total', 'createdBy', 'vendedor', 'cotizacionId', 'cantidades'
+        ])
         && request.resource.data.fecha is string
         && request.resource.data.items is list
         && request.resource.data.items.size() > 0
         && request.resource.data.items.size() <= 100
-        && request.resource.data.total == null;
+        && request.resource.data.total is number
+        && request.resource.data.total >= 0
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.cantidades is map
+        && request.resource.data.vendedor is string;
+      allow update, delete: if false;
+    }
+
+    match /cotizaciones/{cotizacionId} {
+      allow read: if signedIn();
+      allow create: if (isAdmin() || isSeller())
+        && request.resource.data.keys().hasAll([
+          'fecha', 'createdAt', 'expiresAt', 'estado', 'items', 'total', 'createdBy', 'vendedor'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'fecha', 'createdAt', 'expiresAt', 'estado', 'items', 'total', 'createdBy', 'vendedor'
+        ])
+        && request.resource.data.estado == 'Pendiente'
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && request.resource.data.total is number
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'ventaId'])
+        && (
+          (
+            isAdmin()
+            && resource.data.estado == 'Pendiente'
+            && request.resource.data.estado == 'Aprobada'
+            && resource.data.expiresAt > request.time
+            && request.resource.data.get('ventaId', '') == ''
+          )
+          || (
+            isAdmin()
+            && resource.data.estado == 'Pendiente'
+            && request.resource.data.estado == 'Rechazada'
+            && request.resource.data.get('ventaId', '') == ''
+          )
+          || (
+            (isAdmin() || isSeller())
+            && resource.data.estado == 'Pendiente'
+            && request.resource.data.estado == 'Expirada'
+            && resource.data.expiresAt <= request.time
+            && request.resource.data.get('ventaId', '') == ''
+          )
+          || (
+            (isAdmin() || isSeller())
+            && resource.data.estado == 'Aprobada'
+            && resource.data.expiresAt > request.time
+            && request.resource.data.estado == 'Convertida'
+            && request.resource.data.ventaId is string
+            && getAfter(
+              /databases/$(database)/documents/ventas/$(request.resource.data.ventaId)
+            ).data.cotizacionId == cotizacionId
+            && getAfter(
+              /databases/$(database)/documents/ventas/$(request.resource.data.ventaId)
+            ).data.createdBy == request.auth.uid
+          )
+        );
+      allow delete: if false;
+    }
+
+    match /price_history/{changeId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll([
+          'productoId', 'producto', 'precioAnterior', 'precioNuevo', 'changedBy', 'usuario', 'createdAt'
+        ])
+        && request.resource.data.changedBy == request.auth.uid
+        && request.resource.data.precioAnterior is number
+        && request.resource.data.precioNuevo is number;
+      allow update, delete: if false;
+    }
+
+    match /inventory_adjustments/{adjustmentId} {
+      allow read: if isAdmin() || isWarehouse();
+      allow create: if (isAdmin() || isWarehouse())
+        && request.resource.data.keys().hasAll([
+          'productoId', 'producto', 'cantidad', 'tipo', 'motivo',
+          'stockAnterior', 'stockNuevo', 'createdBy', 'usuario', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'productoId', 'producto', 'cantidad', 'tipo', 'motivo',
+          'stockAnterior', 'stockNuevo', 'createdBy', 'usuario', 'createdAt'
+        ])
+        && request.resource.data.productoId is string
+        && request.resource.data.cantidad is int
+        && request.resource.data.cantidad > 0
+        && request.resource.data.tipo in ['Entrada', 'Salida']
+        && request.resource.data.motivo in ['Devolución', 'Merma', 'Pérdida', 'Corrección', 'Compra']
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.stockAnterior is int
+        && request.resource.data.stockNuevo is int
+        && request.resource.data.stockAnterior == get(
+          /databases/$(database)/documents/inventory/$(request.resource.data.productoId)
+        ).data.currentStock
+        && request.resource.data.stockNuevo == getAfter(
+          /databases/$(database)/documents/inventory/$(request.resource.data.productoId)
+        ).data.currentStock
+        && request.resource.data.stockNuevo >= 0
+        && (
+          (request.resource.data.tipo == 'Entrada'
+            && request.resource.data.stockNuevo
+              == request.resource.data.stockAnterior + request.resource.data.cantidad)
+          || (request.resource.data.tipo == 'Salida'
+            && request.resource.data.stockNuevo
+              == request.resource.data.stockAnterior - request.resource.data.cantidad)
+        );
+      allow update, delete: if false;
     }
   }
 }

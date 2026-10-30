@@ -3,8 +3,10 @@ package com.example.rampasmezaapp.ui.auth
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -32,6 +34,7 @@ fun RegisterScreen(
     isLoading: Boolean = false,
     errorMessage: String? = null
 ) {
+    var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var verificationKey by remember { mutableStateOf("") }
@@ -42,7 +45,8 @@ fun RegisterScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.White)
-            .padding(24.dp),
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -82,7 +86,7 @@ fun RegisterScreen(
             shape = RoundedCornerShape(8.dp)
         ) {
             Text(
-                text = "Ingrese su usuario",
+                text = "Nombre del usuario",
                 color = Color.White,
                 modifier = Modifier.padding(16.dp),
                 fontSize = 14.sp
@@ -91,6 +95,39 @@ fun RegisterScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Nombre completo") },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color.Transparent,
+                unfocusedBorderColor = Color.Transparent,
+                focusedTextColor = Color.Black,
+                unfocusedTextColor = Color.Black,
+                focusedContainerColor = Color(0xFFE0E0E0),
+                unfocusedContainerColor = Color(0xFFE0E0E0)
+            ),
+            shape = RoundedCornerShape(8.dp),
+            singleLine = true
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF049749)),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text(
+                text = "Correo electrónico",
+                color = Color.White,
+                modifier = Modifier.padding(16.dp),
+                fontSize = 14.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         OutlinedTextField(
             value = email,
@@ -220,7 +257,8 @@ fun RegisterScreen(
 
 
         val isVerificationKeyValid = verificationKey == "19852025"
-        val isFormValid = email.isNotBlank() && password.isNotBlank() && verificationKey.isNotBlank() && isVerificationKeyValid
+        val isFormValid = name.isNotBlank() && email.isNotBlank() && password.isNotBlank() &&
+            verificationKey.isNotBlank() && isVerificationKeyValid
 
         if (verificationKey.isNotBlank() && !isVerificationKeyValid) {
             Text(
@@ -233,7 +271,7 @@ fun RegisterScreen(
 
 
         Button(
-            onClick = { onRegisterClick(email, email, password) },
+            onClick = { onRegisterClick(email.trim(), name.trim(), password) },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
