@@ -15,6 +15,7 @@ import com.example.rampasmezaapp.ui.inventario.AjustesInventario
 import com.example.rampasmezaapp.ui.auth.Administracion
 import com.example.rampasmezaapp.ui.ventas.Cotizaciones
 import com.example.rampasmezaapp.data.RolUsuario
+import com.example.rampasmezaapp.data.LocalDemoStore
 
 @Composable
 fun AuthNavigation(
@@ -39,8 +40,13 @@ fun AuthNavigation(
         composable("login") {
             LoginScreen(
                 onLoginClick = { email, password ->
-                    inventarioGlobalViewModel.desactivarModoLocal()
-                    authViewModel.login(email, password)
+                    if (LocalDemoStore.acceptsCredentials(email, password)) {
+                        inventarioGlobalViewModel.activarModoLocal()
+                        authViewModel.loginLocal(email, password)
+                    } else {
+                        inventarioGlobalViewModel.desactivarModoLocal()
+                        authViewModel.login(email, password)
+                    }
                 },
                 onRegisterClick = {
                     navController.navigate("register")
