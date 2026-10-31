@@ -21,6 +21,7 @@ import com.example.rampasmezaapp.R
 @Composable
 fun AnadirStock(
     inventarioGlobalViewModel: ViewModelInventarioGlobal,
+    esModoLocal: Boolean,
     onBackToMainClick: () -> Unit
 ) {
     val viewModel = remember { ViewModelInventario(inventarioGlobalViewModel) }
@@ -148,7 +149,7 @@ fun AnadirStock(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                enabled = !state.cargando && state.productoSeleccionado != null && state.cantidadStock.isNotBlank(),
+                enabled = !esModoLocal && !state.cargando && state.productoSeleccionado != null && state.cantidadStock.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
                 shape = RoundedCornerShape(8.dp)
             ) {
@@ -164,6 +165,9 @@ fun AnadirStock(
                         color = Color.Black,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
+                }
+                if (esModoLocal) {
+                    Text("Modo revisión local: los cambios no se guardan.")
                 }
             }
 

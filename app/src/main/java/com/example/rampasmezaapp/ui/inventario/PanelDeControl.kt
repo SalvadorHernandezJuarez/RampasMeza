@@ -25,6 +25,7 @@ import com.example.rampasmezaapp.data.RolUsuario
 @Composable
 fun PanelDeControl(
     rol: RolUsuario,
+    esModoLocal: Boolean,
     onLogoutClick: () -> Unit,
     onAddStockClick: () -> Unit,
     onRegistrarVentasClick: () -> Unit,
@@ -68,6 +69,9 @@ fun PanelDeControl(
                 modifier = Modifier.size(200.dp).clip(RoundedCornerShape(8.dp))
             )
             Text("Acceso: ${rol.etiqueta}", color = Color.DarkGray)
+            if (esModoLocal) {
+                Text("Usuario de prueba · modo revisión sin conexión a la BD", color = Color(0xFF049749))
+            }
             Spacer(modifier = Modifier.height(32.dp))
 
             if (rol != RolUsuario.VENDEDOR) {

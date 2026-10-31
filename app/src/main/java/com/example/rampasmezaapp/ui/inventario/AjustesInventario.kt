@@ -57,6 +57,7 @@ private data class MovimientoUi(
 fun AjustesInventario(
     inventarioGlobalViewModel: ViewModelInventarioGlobal,
     nombreUsuario: String,
+    esModoLocal: Boolean,
     onBack: () -> Unit
 ) {
     val productos by inventarioGlobalViewModel.estadoGlobal.collectAsState()
@@ -89,7 +90,8 @@ fun AjustesInventario(
             }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(esModoLocal) {
+        if (esModoLocal) return@LaunchedEffect
         try {
             cargarHistorial()
         } catch (e: Exception) {
@@ -146,7 +148,7 @@ fun AjustesInventario(
             }
             Spacer(Modifier.height(4.dp))
             Button(
-                enabled = !procesando && producto != null && cantidad.toIntOrNull()?.let { it > 0 } == true,
+                enabled = !esModoLocal && !procesando && producto != null && cantidad.toIntOrNull()?.let { it > 0 } == true,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
                     val seleccionado = producto ?: return@Button
@@ -206,6 +208,9 @@ fun AjustesInventario(
                 }
             ) {
                 Text(if (procesando) "Guardando..." else "Registrar ajuste")
+            }
+            if (esModoLocal) {
+                Text("Modo revisión local: los ajustes no se guardan.")
             }
             Text("Movimientos recientes", fontSize = 20.sp)
             historial.forEach { movimiento ->

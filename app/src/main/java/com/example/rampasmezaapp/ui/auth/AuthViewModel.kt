@@ -17,6 +17,7 @@ data class AuthState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val user: FirebaseUser? = null,
+    val localDemo: Boolean = false,
     val profileLoading: Boolean = false,
     val nombre: String = "",
     val rol: RolUsuario = RolUsuario.VENDEDOR
@@ -136,7 +137,19 @@ class AuthViewModel : ViewModel() {
     }
 
     fun logout() {
-        auth.signOut()
+        if (_authState.value.localDemo) {
+            _authState.value = AuthState()
+        } else {
+            auth.signOut()
+        }
+    }
+
+    fun loginLocal() {
+        _authState.value = AuthState(
+            localDemo = true,
+            nombre = "Usuario de prueba",
+            rol = RolUsuario.ADMINISTRADOR
+        )
     }
 
     fun clearError() {

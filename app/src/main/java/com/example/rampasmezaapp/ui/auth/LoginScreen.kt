@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 fun LoginScreen(
     onLoginClick: (String, String) -> Unit,
     onRegisterClick: () -> Unit,
+    onLocalDemoClick: () -> Unit,
     isLoading: Boolean = false,
     errorMessage: String? = null
 ) {
@@ -207,6 +208,15 @@ fun LoginScreen(
             shape = RoundedCornerShape(24.dp)
         ) {
             Text("Ir a registro", fontSize = 14.sp, color = Color.Black)
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        TextButton(
+            onClick = onLocalDemoClick,
+            enabled = !isLoading
+        ) {
+            Text("Entrar como usuario local (sin BD)", color = Color(0xFF049749))
         }
     }
 }

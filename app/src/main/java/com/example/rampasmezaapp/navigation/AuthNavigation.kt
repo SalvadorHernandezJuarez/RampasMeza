@@ -24,8 +24,8 @@ fun AuthNavigation(
 ) {
     val authState = authViewModel.authState.collectAsState().value
 
-    LaunchedEffect(authState.user, authState.profileLoading) {
-        if (authState.user != null && !authState.profileLoading) {
+    LaunchedEffect(authState.user, authState.localDemo, authState.profileLoading) {
+        if ((authState.user != null || authState.localDemo) && !authState.profileLoading) {
             navController.navigate("inventory") {
                 popUpTo("login") { inclusive = true }
             }
@@ -43,6 +43,10 @@ fun AuthNavigation(
                 },
                 onRegisterClick = {
                     navController.navigate("register")
+                },
+                onLocalDemoClick = {
+                    inventarioGlobalViewModel.activarModoLocal()
+                    authViewModel.loginLocal()
                 },
                 isLoading = authState.isLoading || authState.profileLoading,
                 errorMessage = authState.errorMessage
@@ -65,6 +69,7 @@ fun AuthNavigation(
                 composable("inventory") {
                     PanelDeControl(
                         rol = authState.rol,
+                        esModoLocal = authState.localDemo,
                         onLogoutClick = {
                             authViewModel.logout()
                             navController.navigate("login") {
@@ -92,6 +97,7 @@ fun AuthNavigation(
                 composable("add_stock") {
                     AnadirStock(
                         inventarioGlobalViewModel = inventarioGlobalViewModel,
+                        esModoLocal = authState.localDemo,
                         onBackToMainClick = {
                             navController.popBackStack()
                         }
@@ -103,6 +109,7 @@ fun AuthNavigation(
                     com.example.rampasmezaapp.ui.ventas.RegistrarVentas(
                         inventarioGlobalViewModel = inventarioGlobalViewModel,
                         nombreVendedor = authState.nombre,
+                        esModoLocal = authState.localDemo,
                         onBackToMainClick = { navController.popBackStack() }
                     )
                 }
@@ -110,6 +117,7 @@ fun AuthNavigation(
                 // Historial de ventas
                 composable("historial_ventas") {
                     com.example.rampasmezaapp.ui.ventas.HistorialVentas(
+                        esModoLocal = authState.localDemo,
                         onBackToMainClick = { navController.popBackStack() }
                     )
                 }
@@ -128,6 +136,7 @@ fun AuthNavigation(
                             inventarioGlobalViewModel = inventarioGlobalViewModel,
                             nombreVendedor = authState.nombre,
                             esAdministrador = authState.rol == RolUsuario.ADMINISTRADOR,
+                            esModoLocal = authState.localDemo,
                             onBack = { navController.popBackStack() }
                         )
                     }
@@ -138,6 +147,7 @@ fun AuthNavigation(
                         AjustesInventario(
                             inventarioGlobalViewModel = inventarioGlobalViewModel,
                             nombreUsuario = authState.nombre,
+                            esModoLocal = authState.localDemo,
                             onBack = { navController.popBackStack() }
                         )
                     }
@@ -148,6 +158,7 @@ fun AuthNavigation(
                         Administracion(
                             inventarioGlobalViewModel = inventarioGlobalViewModel,
                             nombreAdministrador = authState.nombre,
+                            esModoLocal = authState.localDemo,
                             onBack = { navController.popBackStack() }
                         )
                     }

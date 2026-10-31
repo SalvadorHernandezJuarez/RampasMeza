@@ -63,6 +63,7 @@ private data class CambioPrecio(
 fun Administracion(
     inventarioGlobalViewModel: ViewModelInventarioGlobal,
     nombreAdministrador: String,
+    esModoLocal: Boolean,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -107,7 +108,14 @@ fun Administracion(
             }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(esModoLocal) {
+        if (esModoLocal) {
+            perfiles = listOf(
+                PerfilUsuario("local-demo", "Usuario de prueba", "demo@local", RolUsuario.ADMINISTRADOR)
+            )
+            historialPrecios = emptyList()
+            return@LaunchedEffect
+        }
         try {
             cargarPerfiles()
             cargarHistorialPrecios()
@@ -123,7 +131,10 @@ fun Administracion(
         ) {
             item {
                 Text("Perfiles y roles", fontSize = 20.sp)
-                Text("Administra los accesos del equipo.")
+                Text(
+                    if (esModoLocal) "Modo revisión local: los cambios no se guardan."
+                    else "Administra los accesos del equipo."
+                )
             }
             items(perfiles, key = { it.id }) { perfil ->
                 var expandido by remember(perfil.rol) { mutableStateOf(false) }
@@ -133,7 +144,7 @@ fun Administracion(
                         Text(perfil.email, color = Color.DarkGray)
                         Button(
                             onClick = { expandido = true },
-                            enabled = perfil.id != FirebaseAuth.getInstance().currentUser?.uid
+                            enabled = !esModoLocal && perfil.id != FirebaseAuth.getInstance().currentUser?.uid
                         ) { Text("Rol: ${perfil.rol.etiqueta}") }
                         DropdownMenu(expanded = expandido, onDismissRequest = { expandido = false }) {
                             RolUsuario.entries.forEach { rol ->
@@ -200,7 +211,7 @@ fun Administracion(
                 )
                 error?.let { Text(it, color = Color.Red) }
                 Button(
-                    enabled = !cargando && producto != null && precio.toDoubleOrNull()?.let { it > 0 } == true,
+                    enabled = !esModoLocal && !cargando && producto != null && precio.toDoubleOrNull()?.let { it > 0 } == true,
                     onClick = {
                         val seleccionado = producto ?: return@Button
                         val nuevoPrecio = precio.toDoubleOrNull() ?: return@Button

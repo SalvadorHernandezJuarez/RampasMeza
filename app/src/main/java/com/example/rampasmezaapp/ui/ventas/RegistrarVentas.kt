@@ -32,6 +32,7 @@ import java.util.Locale
 fun RegistrarVentas(
     inventarioGlobalViewModel: ViewModelInventarioGlobal,
     nombreVendedor: String,
+    esModoLocal: Boolean,
     onBackToMainClick: () -> Unit
 ) {
     val estadoGlobal by inventarioGlobalViewModel.estadoGlobal.collectAsState()
@@ -272,6 +273,7 @@ fun RegistrarVentas(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
+                enabled = !esModoLocal && !estadoVentas.cargando,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
                 shape = RoundedCornerShape(8.dp)
             ) {
@@ -280,6 +282,9 @@ fun RegistrarVentas(
                 } else {
                     Text("Registrar venta", color = Color.Black)
                 }
+            }
+            if (esModoLocal) {
+                Text("Modo revisión local: las ventas no se guardan.")
             }
 
             estadoVentas.recibo?.let { recibo ->

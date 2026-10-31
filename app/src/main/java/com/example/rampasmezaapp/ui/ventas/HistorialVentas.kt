@@ -29,7 +29,7 @@ data class ItemVentaUI(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HistorialVentas(onBackToMainClick: () -> Unit) {
+fun HistorialVentas(esModoLocal: Boolean, onBackToMainClick: () -> Unit) {
     val firestore = remember { FirebaseFirestore.getInstance() }
     var ventas by remember { mutableStateOf<List<ItemVentaUI>>(emptyList()) }
     var cargando by remember { mutableStateOf(true) }
@@ -37,7 +37,11 @@ fun HistorialVentas(onBackToMainClick: () -> Unit) {
     val context = LocalContext.current
     val moneda = remember { NumberFormat.getCurrencyInstance(Locale.forLanguageTag("es-MX")) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(esModoLocal) {
+        if (esModoLocal) {
+            cargando = false
+            return@LaunchedEffect
+        }
         try {
             val snap = firestore.collection("ventas").orderBy("fecha", com.google.firebase.firestore.Query.Direction.DESCENDING).get().await()
             val lista = snap.documents.map { doc ->
@@ -89,6 +93,9 @@ fun HistorialVentas(onBackToMainClick: () -> Unit) {
             } else if (error != null) {
                 Text(text = "Error: $error", color = Color.Red)
             } else {
+                if (esModoLocal) {
+                    Text("El historial no está disponible en el modo de revisión local.")
+                }
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(ventas) { venta ->
                         Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {

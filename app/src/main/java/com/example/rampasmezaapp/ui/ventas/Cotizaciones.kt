@@ -73,6 +73,7 @@ fun Cotizaciones(
     inventarioGlobalViewModel: ViewModelInventarioGlobal,
     nombreVendedor: String,
     esAdministrador: Boolean,
+    esModoLocal: Boolean,
     onBack: () -> Unit
 ) {
     val inventario by inventarioGlobalViewModel.estadoGlobal.collectAsState()
@@ -114,7 +115,11 @@ fun Cotizaciones(
         if (uid.isBlank()) error = "Sesión inválida"
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(esModoLocal) {
+        if (esModoLocal) {
+            cotizaciones = emptyList()
+            return@LaunchedEffect
+        }
         cargando = true
         try {
             cargarCotizaciones()
@@ -138,6 +143,7 @@ fun Cotizaciones(
     Scaffold(topBar = { TopAppBar(title = { Text("Cotizaciones") }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             Button(
+                enabled = !esModoLocal,
                 onClick = {
                     lineas.clear()
                     nueva = true
@@ -145,6 +151,9 @@ fun Cotizaciones(
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF049749))
             ) { Text("Crear cotización", color = Color.White) }
+            if (esModoLocal) {
+                Text("Modo revisión local: las cotizaciones no se guardan.")
+            }
             error?.let { Text(it, color = Color.Red, modifier = Modifier.padding(vertical = 8.dp)) }
             if (cargando) Text("Cargando...")
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -200,10 +209,11 @@ fun Cotizaciones(
                                                 error = "No se pudo aprobar: ${e.message}"
                                             }
                                         }
-                                    }) {
+                                    }, enabled = !esModoLocal) {
                                         Text("Aprobar")
                                     }
                                     Button(
+                                        enabled = !esModoLocal,
                                         onClick = {
                                             scope.launch {
                                                 try {
@@ -221,6 +231,7 @@ fun Cotizaciones(
                             }
                             if (cotizacion.estado == "Aprobada") {
                                 Button(
+                                    enabled = !esModoLocal,
                                     onClick = {
                                         scope.launch {
                                             try {
@@ -304,7 +315,7 @@ fun Cotizaciones(
             },
             confirmButton = {
                 Button(
-                    enabled = lineas.isNotEmpty(),
+                    enabled = !esModoLocal && lineas.isNotEmpty(),
                     onClick = {
                         scope.launch {
                             try {

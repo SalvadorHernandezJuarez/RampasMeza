@@ -86,4 +86,11 @@ class ViewModelInventarioGlobal : ViewModel() {
         }
         _estadoGlobal.value = _estadoGlobal.value.copy(productos = productosActualizados)
     }
+
+    fun activarModoLocal() {
+        _estadoGlobal.value = EstadoInventarioGlobal(
+            productos = DatosProductos.productos,
+            cargando = false
+        )
+    }
 }
