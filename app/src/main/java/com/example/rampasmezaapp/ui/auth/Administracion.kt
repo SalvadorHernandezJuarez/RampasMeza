@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import android.widget.Toast
 import com.example.rampasmezaapp.data.Producto
 import com.example.rampasmezaapp.data.RolUsuario
+import com.example.rampasmezaapp.data.LocalDemoStore
 import com.example.rampasmezaapp.ui.inventario.ViewModelInventarioGlobal
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
@@ -91,6 +92,24 @@ fun Administracion(
     }
 
     suspend fun cargarHistorialPrecios() {
+        if (esModoLocal) {
+            historialPrecios = LocalDemoStore.records("price_history")
+                .sortedByDescending { (it["createdAt"] as? Number)?.toLong() ?: 0L }
+                .take(30)
+                .map { record ->
+                    val fecha = (record["createdAt"] as? Number)?.toLong()?.let {
+                        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(it))
+                    } ?: "Fecha pendiente"
+                    CambioPrecio(
+                        record["producto"] as? String ?: "",
+                        (record["precioAnterior"] as? Number)?.toDouble() ?: 0.0,
+                        (record["precioNuevo"] as? Number)?.toDouble() ?: 0.0,
+                        record["usuario"] as? String ?: "",
+                        fecha
+                    )
+                }
+            return
+        }
         historialPrecios = firestore.collection("price_history")
             .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
             .limit(30)
@@ -111,9 +130,9 @@ fun Administracion(
     LaunchedEffect(esModoLocal) {
         if (esModoLocal) {
             perfiles = listOf(
-                PerfilUsuario("local-demo", "Usuario de prueba", "demo@local", RolUsuario.ADMINISTRADOR)
+                PerfilUsuario("local-demo", "Salvador Hernandez", LocalDemoStore.EMAIL, LocalDemoStore.role())
             )
-            historialPrecios = emptyList()
+            cargarHistorialPrecios()
             return@LaunchedEffect
         }
         try {
@@ -132,7 +151,7 @@ fun Administracion(
             item {
                 Text("Perfiles y roles", fontSize = 20.sp)
                 Text(
-                    if (esModoLocal) "Modo revisión local: los cambios no se guardan."
+                    if (esModoLocal) "El rol de prueba se guarda en este dispositivo."
                     else "Administra los accesos del equipo."
                 )
             }
@@ -144,7 +163,7 @@ fun Administracion(
                         Text(perfil.email, color = Color.DarkGray)
                         Button(
                             onClick = { expandido = true },
-                            enabled = !esModoLocal && perfil.id != FirebaseAuth.getInstance().currentUser?.uid
+                            enabled = esModoLocal || perfil.id != FirebaseAuth.getInstance().currentUser?.uid
                         ) { Text("Rol: ${perfil.rol.etiqueta}") }
                         DropdownMenu(expanded = expandido, onDismissRequest = { expandido = false }) {
                             RolUsuario.entries.forEach { rol ->
@@ -152,6 +171,13 @@ fun Administracion(
                                     expandido = false
                                     scope.launch {
                                         try {
+                                            if (esModoLocal) {
+                                                LocalDemoStore.updateRole(rol)
+                                                perfiles = perfiles.map {
+                                                    if (it.id == perfil.id) it.copy(rol = rol) else it
+                                                }
+                                                return@launch
+                                            }
                                             firestore.collection("users").document(perfil.id)
                                                 .update("role", rol.etiqueta).await()
                                             try {
@@ -211,7 +237,7 @@ fun Administracion(
                 )
                 error?.let { Text(it, color = Color.Red) }
                 Button(
-                    enabled = !esModoLocal && !cargando && producto != null && precio.toDoubleOrNull()?.let { it > 0 } == true,
+                    enabled = !cargando && producto != null && precio.toDoubleOrNull()?.let { it > 0 } == true,
                     onClick = {
                         val seleccionado = producto ?: return@Button
                         val nuevoPrecio = precio.toDoubleOrNull() ?: return@Button
@@ -219,6 +245,24 @@ fun Administracion(
                         error = null
                         scope.launch {
                             try {
+                                if (esModoLocal) {
+                                    val precioAnterior = inventario.productos.first { it.id == seleccionado.id }.price
+                                    LocalDemoStore.addRecord(
+                                        "price_history",
+                                        mapOf(
+                                            "productoId" to seleccionado.id,
+                                            "producto" to seleccionado.name,
+                                            "precioAnterior" to precioAnterior,
+                                            "precioNuevo" to nuevoPrecio,
+                                            "usuario" to LocalDemoStore.EMAIL,
+                                            "createdAt" to System.currentTimeMillis()
+                                        )
+                                    )
+                                    inventarioGlobalViewModel.actualizarPrecioProducto(seleccionado.id, nuevoPrecio)
+                                    Toast.makeText(context, "Precio actualizado y guardado localmente", Toast.LENGTH_SHORT).show()
+                                    cargarHistorialPrecios()
+                                    return@launch
+                                }
                                 val usuario = FirebaseAuth.getInstance().currentUser
                                     ?: throw IllegalStateException("Debes iniciar sesión")
                                 val referencia = firestore.collection("inventory").document(seleccionado.id)

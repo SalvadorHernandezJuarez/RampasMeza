@@ -7,6 +7,7 @@ import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.example.rampasmezaapp.data.RolUsuario
+import com.example.rampasmezaapp.data.LocalDemoStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -144,11 +145,17 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    fun loginLocal() {
+    fun loginLocal(email: String, password: String) {
+        if (!LocalDemoStore.acceptsCredentials(email, password)) {
+            _authState.value = _authState.value.copy(
+                errorMessage = "Las credenciales del simulador son incorrectas"
+            )
+            return
+        }
         _authState.value = AuthState(
             localDemo = true,
-            nombre = "Usuario de prueba",
-            rol = RolUsuario.ADMINISTRADOR
+            nombre = "Salvador Hernandez",
+            rol = LocalDemoStore.role()
         )
     }
 

@@ -10,6 +10,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.rememberNavController
+import com.example.rampasmezaapp.data.LocalDemoStore
 import com.example.rampasmezaapp.navigation.AuthNavigation
 import com.example.rampasmezaapp.ui.auth.AuthViewModel
 import com.example.rampasmezaapp.ui.inventario.ViewModelInventarioGlobal
@@ -18,6 +19,7 @@ import com.example.rampasmezaapp.ui.theme.RampasMEZAAppTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        LocalDemoStore.initialize(applicationContext)
         enableEdgeToEdge()
         setContent {
             RampasMEZAAppTheme {

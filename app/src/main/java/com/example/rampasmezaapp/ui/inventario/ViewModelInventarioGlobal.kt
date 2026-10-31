@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.rampasmezaapp.data.Producto
 import com.example.rampasmezaapp.data.DatosProductos
+import com.example.rampasmezaapp.data.LocalDemoStore
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +30,7 @@ class ViewModelInventarioGlobal : ViewModel() {
     
     private val _estadoGlobal = MutableStateFlow(EstadoInventarioGlobal())
     val estadoGlobal: StateFlow<EstadoInventarioGlobal> = _estadoGlobal.asStateFlow()
+    private var modoLocal = false
 
     init {
         auth.addAuthStateListener(authListener)
@@ -74,6 +76,7 @@ class ViewModelInventarioGlobal : ViewModel() {
     }
 
     fun actualizarStockProducto(productoId: String, nuevoStock: Int) {
+        if (modoLocal) LocalDemoStore.updateStock(productoId, nuevoStock)
         val productosActualizados = _estadoGlobal.value.productos.map { producto ->
             if (producto.id == productoId) producto.copy(currentStock = nuevoStock) else producto
         }
@@ -81,6 +84,7 @@ class ViewModelInventarioGlobal : ViewModel() {
     }
 
     fun actualizarPrecioProducto(productoId: String, nuevoPrecio: Double) {
+        if (modoLocal) LocalDemoStore.updatePrice(productoId, nuevoPrecio)
         val productosActualizados = _estadoGlobal.value.productos.map { producto ->
             if (producto.id == productoId) producto.copy(price = nuevoPrecio) else producto
         }
@@ -88,9 +92,14 @@ class ViewModelInventarioGlobal : ViewModel() {
     }
 
     fun activarModoLocal() {
+        modoLocal = true
         _estadoGlobal.value = EstadoInventarioGlobal(
-            productos = DatosProductos.productos,
+            productos = LocalDemoStore.products(),
             cargando = false
         )
+    }
+
+    fun desactivarModoLocal() {
+        modoLocal = false
     }
 }

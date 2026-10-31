@@ -14,3 +14,7 @@
 3. Entra con esa cuenta, define los precios de los productos y asigna los roles restantes desde **Administración**.
 
 Los comprobantes incluyen el nombre y el logotipo conocidos de Rampas Meza. No incluyen domicilio ni datos fiscales porque no están configurados en el proyecto.
+
+## Simulador local
+
+En la rama `demo-local-salvador`, inicia sesión en **Entrar al simulador local** con `salvador.hernandez@gmail.com` y la contraseña `1234`. El inventario, precios, ventas, ajustes, cotizaciones e historial se guardan en el almacenamiento local del dispositivo; no se envían a Firebase. Los cambios de esta cuenta son solo para pruebas y no deben usarse como autenticación de producción.

@@ -3,7 +3,7 @@ package com.example.rampasmezaapp.ui.inventario
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.rampasmezaapp.data.Producto
-import com.example.rampasmezaapp.data.DatosProductos
+import com.example.rampasmezaapp.data.LocalDemoStore
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
@@ -51,7 +51,7 @@ class ViewModelInventario(
         )
     }
 
-    fun anadirStock() {
+    fun anadirStock(esModoLocal: Boolean = false) {
         val estado = _estadoInventario.value
         val productoSeleccionado = estado.productoSeleccionado
         val cantidadStock = estado.cantidadStock.toIntOrNull()
@@ -70,6 +70,30 @@ class ViewModelInventario(
             _estadoInventario.value = estado.copy(cargando = true, mensajeError = null)
             
             try {
+                if (esModoLocal) {
+                    val nuevoStock = productoSeleccionado.currentStock + cantidadStock
+                    LocalDemoStore.addRecord(
+                        "inventory_adjustments",
+                        mapOf(
+                            "productoId" to productoSeleccionado.id,
+                            "producto" to productoSeleccionado.name,
+                            "cantidad" to cantidadStock,
+                            "tipo" to "Entrada",
+                            "motivo" to "Compra",
+                            "stockAnterior" to productoSeleccionado.currentStock,
+                            "stockNuevo" to nuevoStock,
+                            "usuario" to LocalDemoStore.EMAIL,
+                            "createdAt" to System.currentTimeMillis()
+                        )
+                    )
+                    viewModelGlobal.actualizarStockProducto(productoSeleccionado.id, nuevoStock)
+                    _estadoInventario.value = estado.copy(
+                        cargando = false,
+                        mensajeExito = "Stock añadido y guardado localmente. Nuevo stock: $nuevoStock",
+                        cantidadStock = ""
+                    )
+                    return@launch
+                }
                 val usuario = FirebaseAuth.getInstance().currentUser
                     ?: throw IllegalStateException("Debes iniciar sesión")
                 val docRef = firestore.collection("inventory").document(productoSeleccionado.id)

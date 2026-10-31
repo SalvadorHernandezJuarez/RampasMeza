@@ -3,6 +3,7 @@ package com.example.rampasmezaapp.ui.ventas
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.rampasmezaapp.data.Producto
+import com.example.rampasmezaapp.data.LocalDemoStore
 import com.example.rampasmezaapp.ui.inventario.EmailJSHelper
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -56,7 +57,8 @@ class ViewModelVentas : ViewModel() {
 
     fun registrarVenta(
         nombreVendedor: String,
-        onStocksActualizados: (Map<String, Int>) -> Unit
+        onStocksActualizados: (Map<String, Int>) -> Unit,
+        esModoLocal: Boolean = false
     ) {
         val items = _estado.value.items
         if (items.isEmpty() || _estado.value.cargando) return
@@ -64,6 +66,50 @@ class ViewModelVentas : ViewModel() {
         _estado.value = _estado.value.copy(cargando = true, mensajeError = null, mensajeExito = null)
         viewModelScope.launch {
             try {
+                if (esModoLocal) {
+                    val fecha = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.US).format(Date())
+                    val cantidades = items.groupBy { it.producto.id }.mapValues { (_, repetidos) ->
+                        val total = repetidos.sumOf { it.cantidad.toLong() }
+                        if (total > Int.MAX_VALUE) throw IllegalArgumentException("La cantidad total supera el límite permitido")
+                        total.toInt()
+                    }
+                    val productosActuales = LocalDemoStore.products().associateBy { it.id }
+                    val reciboItems = cantidades.map { (id, cantidad) ->
+                        val product = productosActuales[id] ?: throw IllegalStateException("Producto inválido")
+                        if (product.price <= 0.0) throw IllegalStateException("Configura el precio de ${product.name} antes de vender")
+                        if (product.currentStock < cantidad) throw IllegalStateException("Stock insuficiente para ${product.name}")
+                        ItemRecibo(id, product.name, cantidad, product.price, redondear(product.price * cantidad))
+                    }
+                    val stocks = cantidades.mapValues { (id, cantidad) ->
+                        (productosActuales[id]?.currentStock ?: 0) - cantidad
+                    }
+                    val total = redondear(reciboItems.sumOf { it.subtotal })
+                    val ventaId = LocalDemoStore.addRecord(
+                        "ventas",
+                        mapOf(
+                            "fecha" to fecha,
+                            "items" to reciboItems.map {
+                                mapOf(
+                                    "productoId" to it.productoId,
+                                    "nombre" to it.nombre,
+                                    "cantidad" to it.cantidad,
+                                    "precioUnitario" to it.precioUnitario,
+                                    "subtotal" to it.subtotal
+                                )
+                            },
+                            "total" to total,
+                            "createdBy" to LocalDemoStore.EMAIL,
+                            "vendedor" to nombreVendedor,
+                            "cantidades" to cantidades
+                        )
+                    )
+                    onStocksActualizados(stocks)
+                    _estado.value = EstadoVentas(
+                        mensajeExito = "Venta guardada localmente",
+                        recibo = ReciboVenta(ventaId, fecha, nombreVendedor, reciboItems, total)
+                    )
+                    return@launch
+                }
                 val usuario = FirebaseAuth.getInstance().currentUser
                     ?: throw IllegalStateException("Debes iniciar sesión para registrar una venta")
                 val fecha = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.US).format(Date())

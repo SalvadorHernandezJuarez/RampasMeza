@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.widget.Toast
 import com.example.rampasmezaapp.data.Producto
+import com.example.rampasmezaapp.data.LocalDemoStore
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -73,6 +74,25 @@ fun AjustesInventario(
     val context = LocalContext.current
 
     suspend fun cargarHistorial() {
+        if (esModoLocal) {
+            historial = LocalDemoStore.records("inventory_adjustments")
+                .sortedByDescending { (it["createdAt"] as? Number)?.toLong() ?: 0L }
+                .take(25)
+                .map { record ->
+                    val fecha = (record["createdAt"] as? Number)?.toLong()?.let {
+                        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(java.util.Date(it))
+                    } ?: "Fecha pendiente"
+                    MovimientoUi(
+                        record["producto"] as? String ?: "",
+                        record["tipo"] as? String ?: "",
+                        (record["cantidad"] as? Number)?.toInt() ?: 0,
+                        record["motivo"] as? String ?: "",
+                        record["usuario"] as? String ?: "",
+                        fecha
+                    )
+                }
+            return
+        }
         historial = FirebaseFirestore.getInstance().collection("inventory_adjustments")
             .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
             .limit(25)
@@ -91,7 +111,6 @@ fun AjustesInventario(
     }
 
     LaunchedEffect(esModoLocal) {
-        if (esModoLocal) return@LaunchedEffect
         try {
             cargarHistorial()
         } catch (e: Exception) {
@@ -148,7 +167,7 @@ fun AjustesInventario(
             }
             Spacer(Modifier.height(4.dp))
             Button(
-                enabled = !esModoLocal && !procesando && producto != null && cantidad.toIntOrNull()?.let { it > 0 } == true,
+                enabled = !procesando && producto != null && cantidad.toIntOrNull()?.let { it > 0 } == true,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
                     val seleccionado = producto ?: return@Button
@@ -156,6 +175,30 @@ fun AjustesInventario(
                     procesando = true
                     scope.launch {
                         try {
+                            if (esModoLocal) {
+                                val productoActual = LocalDemoStore.products().first { it.id == seleccionado.id }
+                                val nuevoStock = productoActual.currentStock + if (entrada) unidades else -unidades
+                                if (nuevoStock < 0) error("La salida supera el stock disponible")
+                                LocalDemoStore.addRecord(
+                                    "inventory_adjustments",
+                                    mapOf(
+                                        "productoId" to seleccionado.id,
+                                        "producto" to seleccionado.name,
+                                        "cantidad" to unidades,
+                                        "tipo" to if (entrada) "Entrada" else "Salida",
+                                        "motivo" to motivo,
+                                        "stockAnterior" to productoActual.currentStock,
+                                        "stockNuevo" to nuevoStock,
+                                        "usuario" to LocalDemoStore.EMAIL,
+                                        "createdAt" to System.currentTimeMillis()
+                                    )
+                                )
+                                inventarioGlobalViewModel.actualizarStockProducto(seleccionado.id, nuevoStock)
+                                Toast.makeText(context, "Ajuste guardado localmente", Toast.LENGTH_SHORT).show()
+                                cantidad = ""
+                                cargarHistorial()
+                                return@launch
+                            }
                             val uid = FirebaseAuth.getInstance().currentUser?.uid
                                 ?: error("Debes iniciar sesión")
                             val firestore = FirebaseFirestore.getInstance()
@@ -210,7 +253,7 @@ fun AjustesInventario(
                 Text(if (procesando) "Guardando..." else "Registrar ajuste")
             }
             if (esModoLocal) {
-                Text("Modo revisión local: los ajustes no se guardan.")
+                Text("Los ajustes se guardan en este dispositivo.")
             }
             Text("Movimientos recientes", fontSize = 20.sp)
             historial.forEach { movimiento ->

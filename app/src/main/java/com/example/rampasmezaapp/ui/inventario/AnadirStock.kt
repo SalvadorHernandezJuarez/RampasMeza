@@ -145,11 +145,11 @@ fun AnadirStock(
             }
 
             Button(
-                onClick = { viewModel.anadirStock() },
+                onClick = { viewModel.anadirStock(esModoLocal) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                enabled = !esModoLocal && !state.cargando && state.productoSeleccionado != null && state.cantidadStock.isNotBlank(),
+                enabled = !state.cargando && state.productoSeleccionado != null && state.cantidadStock.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
                 shape = RoundedCornerShape(8.dp)
             ) {
@@ -166,10 +166,8 @@ fun AnadirStock(
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                 }
-                if (esModoLocal) {
-                    Text("Modo revisión local: los cambios no se guardan.")
-                }
             }
+            if (esModoLocal) Text("Los cambios se guardan en este dispositivo.")
 
             Spacer(modifier = Modifier.height(16.dp))
 

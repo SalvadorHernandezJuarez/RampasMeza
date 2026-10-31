@@ -263,17 +263,17 @@ fun RegistrarVentas(
                         mensajeError = "Agrega al menos un producto"
                         return@Button
                     }
-                    viewModelVentas.registrarVenta(nombreVendedor) { cambios ->
+                    viewModelVentas.registrarVenta(nombreVendedor, { cambios ->
                         // Actualizar stock global en memoria para reflejar al instante
                         cambios.forEach { (id, nuevo) ->
                             inventarioGlobalViewModel.actualizarStockProducto(id, nuevo)
                         }
-                    }
+                    }, esModoLocal)
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                enabled = !esModoLocal && !estadoVentas.cargando,
+                enabled = !estadoVentas.cargando,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
                 shape = RoundedCornerShape(8.dp)
             ) {
@@ -284,7 +284,7 @@ fun RegistrarVentas(
                 }
             }
             if (esModoLocal) {
-                Text("Modo revisión local: las ventas no se guardan.")
+                Text("Las ventas se guardan en este dispositivo.")
             }
 
             estadoVentas.recibo?.let { recibo ->

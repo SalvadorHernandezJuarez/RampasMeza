@@ -39,14 +39,15 @@ fun AuthNavigation(
         composable("login") {
             LoginScreen(
                 onLoginClick = { email, password ->
+                    inventarioGlobalViewModel.desactivarModoLocal()
                     authViewModel.login(email, password)
                 },
                 onRegisterClick = {
                     navController.navigate("register")
                 },
-                onLocalDemoClick = {
+                onLocalDemoClick = { email, password ->
                     inventarioGlobalViewModel.activarModoLocal()
-                    authViewModel.loginLocal()
+                    authViewModel.loginLocal(email, password)
                 },
                 isLoading = authState.isLoading || authState.profileLoading,
                 errorMessage = authState.errorMessage
@@ -154,7 +155,7 @@ fun AuthNavigation(
                 }
 
                 composable("administracion") {
-                    if (authState.rol == RolUsuario.ADMINISTRADOR) {
+                    if (authState.rol == RolUsuario.ADMINISTRADOR || authState.localDemo) {
                         Administracion(
                             inventarioGlobalViewModel = inventarioGlobalViewModel,
                             nombreAdministrador = authState.nombre,

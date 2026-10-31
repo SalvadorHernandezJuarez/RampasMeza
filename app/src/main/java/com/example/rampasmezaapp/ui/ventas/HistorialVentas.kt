@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
 import com.google.firebase.firestore.FirebaseFirestore
+import com.example.rampasmezaapp.data.LocalDemoStore
 import kotlinx.coroutines.tasks.await
 import java.text.NumberFormat
 import java.util.Locale
@@ -39,6 +40,17 @@ fun HistorialVentas(esModoLocal: Boolean, onBackToMainClick: () -> Unit) {
 
     LaunchedEffect(esModoLocal) {
         if (esModoLocal) {
+            ventas = LocalDemoStore.records("ventas").map { record ->
+                @Suppress("UNCHECKED_CAST")
+                val items = record["items"] as? List<Map<String, Any?>> ?: emptyList()
+                ItemVentaUI(
+                    id = record["id"] as? String ?: "",
+                    fecha = record["fecha"] as? String ?: "",
+                    vendedor = record["vendedor"] as? String ?: "",
+                    total = (record["total"] as? Number)?.toDouble(),
+                    items = items
+                )
+            }.sortedByDescending { it.fecha }
             cargando = false
             return@LaunchedEffect
         }
@@ -94,7 +106,7 @@ fun HistorialVentas(esModoLocal: Boolean, onBackToMainClick: () -> Unit) {
                 Text(text = "Error: $error", color = Color.Red)
             } else {
                 if (esModoLocal) {
-                    Text("El historial no está disponible en el modo de revisión local.")
+                    Text("Historial guardado en este dispositivo.")
                 }
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(ventas) { venta ->

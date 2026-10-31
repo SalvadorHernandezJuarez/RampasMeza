@@ -70,7 +70,7 @@ fun PanelDeControl(
             )
             Text("Acceso: ${rol.etiqueta}", color = Color.DarkGray)
             if (esModoLocal) {
-                Text("Usuario de prueba · modo revisión sin conexión a la BD", color = Color(0xFF049749))
+                Text("Simulador de Salvador · datos guardados en este dispositivo", color = Color(0xFF049749))
             }
             Spacer(modifier = Modifier.height(32.dp))
 
@@ -84,7 +84,7 @@ fun PanelDeControl(
                 botonMenu("Cotizaciones", onCotizacionesClick)
             }
             botonMenu("Generar reporte de inventario", onReporteInventarioClick)
-            if (rol == RolUsuario.ADMINISTRADOR) {
+            if (rol == RolUsuario.ADMINISTRADOR || esModoLocal) {
                 botonMenu("Administrar usuarios, roles y precios", onAdministracionClick, true)
             }
             Spacer(modifier = Modifier.height(24.dp))

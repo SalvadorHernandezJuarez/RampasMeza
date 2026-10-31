@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.rampasmezaapp.data.Producto
+import com.example.rampasmezaapp.data.LocalDemoStore
 import com.example.rampasmezaapp.ui.inventario.DialogoSeleccionProducto
 import com.example.rampasmezaapp.ui.inventario.ViewModelInventarioGlobal
 import com.google.firebase.auth.FirebaseAuth
@@ -91,6 +92,33 @@ fun Cotizaciones(
     val lineas = remember { mutableStateListOf<LineaCotizacion>() }
 
     suspend fun cargarCotizaciones() {
+        if (esModoLocal) {
+            val now = System.currentTimeMillis()
+            val registros = LocalDemoStore.records("cotizaciones")
+            registros.forEach { record ->
+                if (record["estado"] == "Pendiente" &&
+                    ((record["expiresAt"] as? Number)?.toLong() ?: Long.MAX_VALUE) <= now
+                ) {
+                    LocalDemoStore.updateRecord(
+                        "cotizaciones",
+                        record["id"] as String,
+                        mapOf("estado" to "Expirada")
+                    )
+                }
+            }
+            cotizaciones = LocalDemoStore.records("cotizaciones").map { record ->
+                @Suppress("UNCHECKED_CAST")
+                CotizacionUi(
+                    id = record["id"] as? String ?: "",
+                    fecha = record["fecha"] as? String ?: "",
+                    estado = record["estado"] as? String ?: "Pendiente",
+                    total = (record["total"] as? Number)?.toDouble() ?: 0.0,
+                    vendedor = record["vendedor"] as? String ?: "",
+                    items = record["items"] as? List<Map<String, Any?>> ?: emptyList()
+                )
+            }.sortedByDescending { it.fecha }
+            return
+        }
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         val docs = firestore.collection("cotizaciones").get().await()
         val ahora = System.currentTimeMillis()
@@ -116,10 +144,6 @@ fun Cotizaciones(
     }
 
     LaunchedEffect(esModoLocal) {
-        if (esModoLocal) {
-            cotizaciones = emptyList()
-            return@LaunchedEffect
-        }
         cargando = true
         try {
             cargarCotizaciones()
@@ -143,7 +167,6 @@ fun Cotizaciones(
     Scaffold(topBar = { TopAppBar(title = { Text("Cotizaciones") }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             Button(
-                enabled = !esModoLocal,
                 onClick = {
                     lineas.clear()
                     nueva = true
@@ -152,7 +175,7 @@ fun Cotizaciones(
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF049749))
             ) { Text("Crear cotización", color = Color.White) }
             if (esModoLocal) {
-                Text("Modo revisión local: las cotizaciones no se guardan.")
+                Text("Las cotizaciones se guardan en este dispositivo.")
             }
             error?.let { Text(it, color = Color.Red, modifier = Modifier.padding(vertical = 8.dp)) }
             if (cargando) Text("Cargando...")
@@ -202,23 +225,34 @@ fun Cotizaciones(
                                     Button(onClick = {
                                         scope.launch {
                                             try {
+                                            if (esModoLocal) {
+                                                LocalDemoStore.updateRecord(
+                                                    "cotizaciones", cotizacion.id, mapOf("estado" to "Aprobada")
+                                                )
+                                            } else {
                                                 firestore.collection("cotizaciones").document(cotizacion.id)
                                                     .update("estado", "Aprobada").await()
-                                                refrescar()
+                                            }
+                                            refrescar()
                                             } catch (e: Exception) {
                                                 error = "No se pudo aprobar: ${e.message}"
                                             }
                                         }
-                                    }, enabled = !esModoLocal) {
+                                    }) {
                                         Text("Aprobar")
                                     }
                                     Button(
-                                        enabled = !esModoLocal,
                                         onClick = {
                                             scope.launch {
                                                 try {
-                                                    firestore.collection("cotizaciones").document(cotizacion.id)
-                                                        .update("estado", "Rechazada").await()
+                                                    if (esModoLocal) {
+                                                        LocalDemoStore.updateRecord(
+                                                            "cotizaciones", cotizacion.id, mapOf("estado" to "Rechazada")
+                                                        )
+                                                    } else {
+                                                        firestore.collection("cotizaciones").document(cotizacion.id)
+                                                            .update("estado", "Rechazada").await()
+                                                    }
                                                     refrescar()
                                                 } catch (e: Exception) {
                                                     error = "No se pudo rechazar: ${e.message}"
@@ -231,17 +265,24 @@ fun Cotizaciones(
                             }
                             if (cotizacion.estado == "Aprobada") {
                                 Button(
-                                    enabled = !esModoLocal,
                                     onClick = {
                                         scope.launch {
                                             try {
                                                 cargando = true
-                                                convertirCotizacion(
-                                                    cotizacion.id,
-                                                    nombreVendedor,
-                                                    firestore,
-                                                    inventarioGlobalViewModel
-                                                )
+                                                if (esModoLocal) {
+                                                    convertirCotizacionLocal(
+                                                        cotizacion,
+                                                        nombreVendedor,
+                                                        inventarioGlobalViewModel
+                                                    )
+                                                } else {
+                                                    convertirCotizacion(
+                                                        cotizacion.id,
+                                                        nombreVendedor,
+                                                        firestore,
+                                                        inventarioGlobalViewModel
+                                                    )
+                                                }
                                                 try {
                                                     cargarCotizaciones()
                                                 } catch (e: Exception) {
@@ -315,29 +356,49 @@ fun Cotizaciones(
             },
             confirmButton = {
                 Button(
-                    enabled = !esModoLocal && lineas.isNotEmpty(),
+                    enabled = lineas.isNotEmpty(),
                     onClick = {
                         scope.launch {
                             try {
-                                val usuario = FirebaseAuth.getInstance().currentUser
-                                    ?: throw IllegalStateException("Debes iniciar sesión")
                                 val ahora = System.currentTimeMillis()
                                 val fecha = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(ahora))
+                                val items = lineas.map {
+                                    mapOf(
+                                        "productoId" to it.productoId,
+                                        "nombre" to it.nombre,
+                                        "cantidad" to it.cantidad,
+                                        "precioUnitario" to it.precioUnitario,
+                                        "subtotal" to it.subtotal
+                                    )
+                                }
+                                if (esModoLocal) {
+                                    LocalDemoStore.addRecord(
+                                        "cotizaciones",
+                                        mapOf(
+                                            "fecha" to fecha,
+                                            "createdAt" to ahora,
+                                            "expiresAt" to ahora + 30L * 24 * 60 * 60 * 1000,
+                                            "estado" to "Pendiente",
+                                            "items" to items,
+                                            "total" to redondear(lineas.sumOf { it.subtotal }),
+                                            "createdBy" to LocalDemoStore.EMAIL,
+                                            "vendedor" to nombreVendedor
+                                        )
+                                    )
+                                    nueva = false
+                                    lineas.clear()
+                                    cargarCotizaciones()
+                                    return@launch
+                                }
+                                val usuario = FirebaseAuth.getInstance().currentUser
+                                    ?: throw IllegalStateException("Debes iniciar sesión")
                                 firestore.collection("cotizaciones").add(
                                     mapOf(
                                         "fecha" to fecha,
                                         "createdAt" to FieldValue.serverTimestamp(),
                                         "expiresAt" to ahora + 30L * 24 * 60 * 60 * 1000,
                                         "estado" to "Pendiente",
-                                        "items" to lineas.map {
-                                            mapOf(
-                                                "productoId" to it.productoId,
-                                                "nombre" to it.nombre,
-                                                "cantidad" to it.cantidad,
-                                                "precioUnitario" to it.precioUnitario,
-                                                "subtotal" to it.subtotal
-                                            )
-                                        },
+                                        "items" to items,
                                         "total" to redondear(lineas.sumOf { it.subtotal }),
                                         "createdBy" to usuario.uid,
                                         "vendedor" to nombreVendedor
@@ -432,6 +493,54 @@ private suspend fun convertirCotizacion(
         cambios.associate { it.first.id to it.second }
     }.await()
     result.forEach { (id, stock) -> inventarioGlobalViewModel.actualizarStockProducto(id, stock) }
+}
+
+private fun convertirCotizacionLocal(
+    cotizacion: CotizacionUi,
+    nombreVendedor: String,
+    inventarioGlobalViewModel: ViewModelInventarioGlobal
+) {
+    val guardada = LocalDemoStore.records("cotizaciones").firstOrNull { it["id"] == cotizacion.id }
+        ?: throw IllegalStateException("No se encontró la cotización")
+    if (guardada["estado"] != "Aprobada") {
+        throw IllegalStateException("Solo se pueden convertir cotizaciones aprobadas")
+    }
+    val expiresAt = (guardada["expiresAt"] as? Number)?.toLong() ?: 0L
+    if (expiresAt <= System.currentTimeMillis()) throw IllegalStateException("La cotización ya expiró")
+    if (guardada["ventaId"] != null) throw IllegalStateException("Esta cotización ya fue convertida")
+
+    val quantities = cotizacion.items.groupBy { item ->
+        item["productoId"] as? String ?: throw IllegalStateException("Producto inválido en la cotización")
+    }.mapValues { (_, entries) ->
+        val total = entries.sumOf { (it["cantidad"] as? Number)?.toLong() ?: 0L }
+        if (total <= 0L || total > Int.MAX_VALUE) throw IllegalStateException("Cantidad inválida en la cotización")
+        total.toInt()
+    }
+    val products = LocalDemoStore.products().associateBy { it.id }
+    val newStocks = quantities.mapValues { (id, quantity) ->
+        val stock = products[id]?.currentStock ?: 0
+        if (stock < quantity) throw IllegalStateException("Stock insuficiente para ${products[id]?.name ?: id}")
+        stock - quantity
+    }
+    val fecha = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.US).format(Date())
+    val saleId = LocalDemoStore.addRecord(
+        "ventas",
+        mapOf(
+            "fecha" to fecha,
+            "items" to cotizacion.items,
+            "total" to cotizacion.total,
+            "createdBy" to LocalDemoStore.EMAIL,
+            "vendedor" to nombreVendedor,
+            "cotizacionId" to cotizacion.id,
+            "cantidades" to quantities
+        )
+    )
+    newStocks.forEach { (id, stock) -> inventarioGlobalViewModel.actualizarStockProducto(id, stock) }
+    LocalDemoStore.updateRecord(
+        "cotizaciones",
+        cotizacion.id,
+        mapOf("estado" to "Convertida", "ventaId" to saleId)
+    )
 }
 
 private fun redondear(valor: Double): Double = kotlin.math.round(valor * 100.0) / 100.0

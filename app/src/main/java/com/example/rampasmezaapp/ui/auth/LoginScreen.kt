@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.sp
 fun LoginScreen(
     onLoginClick: (String, String) -> Unit,
     onRegisterClick: () -> Unit,
-    onLocalDemoClick: () -> Unit,
+    onLocalDemoClick: (String, String) -> Unit,
     isLoading: Boolean = false,
     errorMessage: String? = null
 ) {
@@ -213,10 +213,16 @@ fun LoginScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         TextButton(
-            onClick = onLocalDemoClick,
-            enabled = !isLoading
+            onClick = { onLocalDemoClick(email, password) },
+            enabled = !isLoading && email.isNotBlank() && password.isNotBlank()
         ) {
-            Text("Entrar como usuario local (sin BD)", color = Color(0xFF049749))
+            Text("Entrar al simulador local", color = Color(0xFF049749))
         }
+        Text(
+            "Cuenta de prueba: salvador.hernandez@gmail.com · contraseña: 1234",
+            color = Color.DarkGray,
+            textAlign = TextAlign.Center,
+            fontSize = 12.sp
+        )
     }
 }
