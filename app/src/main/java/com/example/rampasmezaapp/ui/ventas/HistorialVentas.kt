@@ -105,9 +105,6 @@ fun HistorialVentas(esModoLocal: Boolean, onBackToMainClick: () -> Unit) {
             } else if (error != null) {
                 Text(text = "Error: $error", color = Color.Red)
             } else {
-                if (esModoLocal) {
-                    Text("Historial guardado en este dispositivo.")
-                }
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(ventas) { venta ->
                         Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {

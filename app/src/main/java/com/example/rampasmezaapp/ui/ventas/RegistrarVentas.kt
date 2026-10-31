@@ -283,10 +283,6 @@ fun RegistrarVentas(
                     Text("Registrar venta", color = Color.Black)
                 }
             }
-            if (esModoLocal) {
-                Text("Las ventas se guardan en este dispositivo.")
-            }
-
             estadoVentas.recibo?.let { recibo ->
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(

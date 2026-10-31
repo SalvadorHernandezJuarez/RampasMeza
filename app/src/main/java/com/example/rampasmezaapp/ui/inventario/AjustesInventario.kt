@@ -252,9 +252,6 @@ fun AjustesInventario(
             ) {
                 Text(if (procesando) "Guardando..." else "Registrar ajuste")
             }
-            if (esModoLocal) {
-                Text("Los ajustes se guardan en este dispositivo.")
-            }
             Text("Movimientos recientes", fontSize = 20.sp)
             historial.forEach { movimiento ->
                 androidx.compose.material3.Card(modifier = Modifier.fillMaxWidth()) {

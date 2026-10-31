@@ -69,9 +69,6 @@ fun PanelDeControl(
                 modifier = Modifier.size(200.dp).clip(RoundedCornerShape(8.dp))
             )
             Text("Acceso: ${rol.etiqueta}", color = Color.DarkGray)
-            if (esModoLocal) {
-                Text("Cuenta de Salvador · datos guardados en este dispositivo", color = Color(0xFF049749))
-            }
             Spacer(modifier = Modifier.height(32.dp))
 
             if (rol != RolUsuario.VENDEDOR) {

@@ -150,10 +150,7 @@ fun Administracion(
         ) {
             item {
                 Text("Perfiles y roles", fontSize = 20.sp)
-                Text(
-                    if (esModoLocal) "El rol de prueba se guarda en este dispositivo."
-                    else "Administra los accesos del equipo."
-                )
+                Text("Administra los accesos del equipo.")
             }
             items(perfiles, key = { it.id }) { perfil ->
                 var expandido by remember(perfil.rol) { mutableStateOf(false) }

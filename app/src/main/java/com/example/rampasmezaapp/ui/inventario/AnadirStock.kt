@@ -167,8 +167,6 @@ fun AnadirStock(
                     )
                 }
             }
-            if (esModoLocal) Text("Los cambios se guardan en este dispositivo.")
-
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(
