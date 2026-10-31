@@ -148,7 +148,7 @@ class AuthViewModel : ViewModel() {
     fun loginLocal(email: String, password: String) {
         if (!LocalDemoStore.acceptsCredentials(email, password)) {
             _authState.value = _authState.value.copy(
-                errorMessage = "Las credenciales del simulador son incorrectas"
+                errorMessage = "Las credenciales de la cuenta local son incorrectas"
             )
             return
         }

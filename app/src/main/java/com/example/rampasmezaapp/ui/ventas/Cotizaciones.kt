@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -86,6 +88,7 @@ fun Cotizaciones(
     var cargando by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var nueva by remember { mutableStateOf(false) }
+    var cotizacionEnEdicion by remember { mutableStateOf<String?>(null) }
     var selector by remember { mutableStateOf(false) }
     var seleccionado by remember { mutableStateOf<Producto?>(null) }
     var cantidad by remember { mutableStateOf("") }
@@ -169,14 +172,12 @@ fun Cotizaciones(
             Button(
                 onClick = {
                     lineas.clear()
+                    cotizacionEnEdicion = null
                     nueva = true
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF049749))
             ) { Text("Crear cotización", color = Color.White) }
-            if (esModoLocal) {
-                Text("Las cotizaciones se guardan en este dispositivo.")
-            }
             error?.let { Text(it, color = Color.Red, modifier = Modifier.padding(vertical = 8.dp)) }
             if (cargando) Text("Cargando...")
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -190,9 +191,37 @@ fun Cotizaciones(
                             Text("Fecha: ${cotizacion.fecha}")
                             Text("Estado: ${cotizacion.estado}", color = Color(0xFF049749))
                             cotizacion.items.forEach { item ->
-                                Text("${item["nombre"] ?: "Producto"} x${item["cantidad"] ?: 0}")
+                                val cantidadItem = (item["cantidad"] as? Number)?.toInt() ?: 0
+                                val precioUnitario = (item["precioUnitario"] as? Number)?.toDouble()
+                                val subtotal = (item["subtotal"] as? Number)?.toDouble()
+                                Text(item["nombre"] as? String ?: "Producto")
+                                Text(
+                                    "$cantidadItem × ${precioUnitario?.let(moneda::format) ?: "Precio no disponible"}" +
+                                        (subtotal?.let { " = ${moneda.format(it)}" } ?: "")
+                                )
                             }
                             Text("Total: ${moneda.format(cotizacion.total)}")
+                            if (esModoLocal && cotizacion.estado == "Pendiente") {
+                                Button(onClick = {
+                                    lineas.clear()
+                                    lineas.addAll(cotizacion.items.mapNotNull { item ->
+                                        val productoId = item["productoId"] as? String ?: return@mapNotNull null
+                                        val cantidad = (item["cantidad"] as? Number)?.toInt() ?: return@mapNotNull null
+                                        val precio = (item["precioUnitario"] as? Number)?.toDouble()
+                                            ?: return@mapNotNull null
+                                        LineaCotizacion(
+                                            productoId = productoId,
+                                            nombre = item["nombre"] as? String ?: "Producto",
+                                            cantidad = cantidad,
+                                            precioUnitario = precio,
+                                            subtotal = (item["subtotal"] as? Number)?.toDouble()
+                                                ?: redondear(precio * cantidad)
+                                        )
+                                    })
+                                    cotizacionEnEdicion = cotizacion.id
+                                    nueva = true
+                                }) { Text("Editar cotización") }
+                            }
                             Button(onClick = {
                                 try {
                                     val lineasPdf = cotizacion.items.map { item ->
@@ -312,7 +341,7 @@ fun Cotizaciones(
     if (nueva) {
         AlertDialog(
             onDismissRequest = { nueva = false },
-            title = { Text("Nueva cotización") },
+            title = { Text(if (cotizacionEnEdicion == null) "Nueva cotización" else "Editar cotización") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { selector = true }, modifier = Modifier.fillMaxWidth()) {
@@ -349,7 +378,35 @@ fun Cotizaciones(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("Agregar producto") }
-                    lineas.forEach { Text("${it.nombre} x${it.cantidad} — ${moneda.format(it.subtotal)}") }
+                    if (lineas.isNotEmpty()) {
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 260.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            itemsIndexed(lineas) { index, linea ->
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(linea.nombre)
+                                    Text("Precio unitario: ${moneda.format(linea.precioUnitario)}")
+                                    OutlinedTextField(
+                                        value = linea.cantidad.toString(),
+                                        onValueChange = { value ->
+                                            val nuevaCantidad = value.filter(Char::isDigit).toIntOrNull()
+                                            if (nuevaCantidad != null && nuevaCantidad > 0) {
+                                                lineas[index] = linea.copy(
+                                                    cantidad = nuevaCantidad,
+                                                    subtotal = redondear(linea.precioUnitario * nuevaCantidad)
+                                                )
+                                            }
+                                        },
+                                        label = { Text("Cantidad") },
+                                        singleLine = true
+                                    )
+                                    Text("Importe: ${moneda.format(linea.subtotal)}")
+                                    Button(onClick = { lineas.removeAt(index) }) { Text("Quitar producto") }
+                                }
+                            }
+                        }
+                    }
                     Text("Total: ${moneda.format(lineas.sumOf { it.subtotal })}")
                     Text("La cotización expira en 30 días.", color = Color.DarkGray)
                 }
@@ -372,20 +429,30 @@ fun Cotizaciones(
                                     )
                                 }
                                 if (esModoLocal) {
-                                    LocalDemoStore.addRecord(
-                                        "cotizaciones",
-                                        mapOf(
+                                    val datosCotizacion = mapOf(
                                             "fecha" to fecha,
-                                            "createdAt" to ahora,
-                                            "expiresAt" to ahora + 30L * 24 * 60 * 60 * 1000,
-                                            "estado" to "Pendiente",
                                             "items" to items,
                                             "total" to redondear(lineas.sumOf { it.subtotal }),
-                                            "createdBy" to LocalDemoStore.EMAIL,
-                                            "vendedor" to nombreVendedor
+                                            "vendedor" to nombreVendedor,
+                                                "expiresAt" to ahora + 30L * 24 * 60 * 60 * 1000,
+                                                "updatedAt" to ahora
+                                            )
+                                    val idEdicion = cotizacionEnEdicion
+                                    if (idEdicion == null) {
+                                        LocalDemoStore.addRecord(
+                                            "cotizaciones",
+                                            datosCotizacion + mapOf(
+                                                "createdAt" to ahora,
+                                                "expiresAt" to ahora + 30L * 24 * 60 * 60 * 1000,
+                                                "estado" to "Pendiente",
+                                                "createdBy" to LocalDemoStore.EMAIL
+                                            )
                                         )
-                                    )
+                                    } else {
+                                        LocalDemoStore.updateRecord("cotizaciones", idEdicion, datosCotizacion)
+                                    }
                                     nueva = false
+                                    cotizacionEnEdicion = null
                                     lineas.clear()
                                     cargarCotizaciones()
                                     return@launch
@@ -405,6 +472,7 @@ fun Cotizaciones(
                                     )
                                 ).await()
                                 nueva = false
+                                cotizacionEnEdicion = null
                                 lineas.clear()
                                 try {
                                     cargarCotizaciones()

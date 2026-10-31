@@ -216,7 +216,7 @@ fun LoginScreen(
             onClick = { onLocalDemoClick(email, password) },
             enabled = !isLoading && email.isNotBlank() && password.isNotBlank()
         ) {
-            Text("Entrar al simulador local", color = Color(0xFF049749))
+            Text("Entrar como Salvador", color = Color(0xFF049749))
         }
         Text(
             "Cuenta de prueba: salvador.hernandez@gmail.com · contraseña: 1234",

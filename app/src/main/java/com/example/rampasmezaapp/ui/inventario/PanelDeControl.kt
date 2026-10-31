@@ -70,7 +70,7 @@ fun PanelDeControl(
             )
             Text("Acceso: ${rol.etiqueta}", color = Color.DarkGray)
             if (esModoLocal) {
-                Text("Simulador de Salvador · datos guardados en este dispositivo", color = Color(0xFF049749))
+                Text("Cuenta de Salvador · datos guardados en este dispositivo", color = Color(0xFF049749))
             }
             Spacer(modifier = Modifier.height(32.dp))
 
